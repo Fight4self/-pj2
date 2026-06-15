@@ -1,0 +1,9 @@
+.idea
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+_result/
+.DS_Store
+*.pkl
+*.uv/
