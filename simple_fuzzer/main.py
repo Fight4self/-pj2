@@ -5,6 +5,9 @@ import time
 from fuzzer.path_grey_box_fuzzer import PathGreyBoxFuzzer
 from runner.function_coverage_runner import FunctionCoverageRunner
 from schedule.path_power_schedule import PathPowerSchedule
+from schedule.size_schedule import SizeSchedule
+from schedule.coverage_size_schedule import CoverageSizeSchedule
+from schedule.rare_line_schedule import RareLineSchedule
 from samples.samples import sample1, sample2, sample3, sample4
 from utils.object_utils import dump_object, load_object
 
@@ -40,7 +43,19 @@ def parse_args():
                         help="Directory used to persist the run result")
     parser.add_argument("--quiet", action="store_true",
                         help="Disable the status table output")
+    parser.add_argument("--schedule", default="path", choices=("path", "size", "coverage_size", "rare_line"),
+                        help="Scheduling strategy: path (default), size, coverage_size, rare_line")
     return parser.parse_args()
+
+
+def build_schedule(name: str):
+    schedule_map = {
+        "path": PathPowerSchedule,
+        "size": SizeSchedule,
+        "coverage_size": CoverageSizeSchedule,
+        "rare_line": RareLineSchedule,
+    }
+    return schedule_map[name]()
 
 
 if __name__ == "__main__":
@@ -50,7 +65,7 @@ if __name__ == "__main__":
     f_runner = FunctionCoverageRunner(target_function)
     seeds = load_object(corpus_path)
 
-    grey_fuzzer = PathGreyBoxFuzzer(seeds=seeds, schedule=PathPowerSchedule(), is_print=not args.quiet)
+    grey_fuzzer = PathGreyBoxFuzzer(seeds=seeds, schedule=build_schedule(args.schedule), is_print=not args.quiet)
     start_time = time.time()
     grey_fuzzer.runs(f_runner, run_time=args.run_time)
 

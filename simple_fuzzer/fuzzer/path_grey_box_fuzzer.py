@@ -57,7 +57,8 @@ class PathGreyBoxFuzzer(GreyBoxFuzzer):
         is_new_path = self.schedule.register_path(path_id)
         if is_new_path:
             self.last_new_path_time = time.time()
-        self.total_paths = len(self.schedule.path_frequency)
+        if hasattr(self.schedule, 'path_frequency'):
+            self.total_paths = len(self.schedule.path_frequency)
 
         if len(self.population) > population_size_before:
             self.population[-1].path_id = path_id

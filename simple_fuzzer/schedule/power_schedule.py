@@ -8,6 +8,10 @@ MAX_SEEDS = 1000
 
 class PowerSchedule:
 
+    def register_path(self, path_id: str) -> bool:
+        """Optional hook called by PathGreyBoxFuzzer each run. Override in subclasses."""
+        return False
+
     def assign_energy(self, population: List[Seed]) -> None:
         """Assigns each seed the same energy"""
         for seed in population:
