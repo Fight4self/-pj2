@@ -1,5 +1,15 @@
 import random
-from typing import Any
+from typing import Any, List
+
+
+def _to_bytes(s: str) -> bytearray:
+    """Encode string to bytearray using latin-1 to preserve all byte values."""
+    return bytearray(s.encode('latin-1'))
+
+
+def _from_bytes(data: bytearray) -> str:
+    """Decode bytearray back to string using latin-1."""
+    return data.decode('latin-1')
 
 
 def insert_random_character(s: str) -> str:
@@ -8,9 +18,24 @@ def insert_random_character(s: str) -> str:
     pos 为随机生成，范围为 [0, len(s)]
     插入的 byte 为随机生成，范围为 [32, 127]
     """
-    pos = random.randint(0, len(s))  # 随机位置，包括插入在末尾
-    random_char = chr(random.randint(32, 126))  # ASCII 范围内可打印字符（127是DEL，不常用）
+    pos = random.randint(0, len(s))
+    random_char = chr(random.randint(32, 126))
     return s[:pos] + random_char + s[pos:]
+
+
+def delete_random_bytes(s: str) -> str:
+    """
+    随机删除一段连续字节
+    随机选取起始位置和长度，删除该段内容
+    """
+    if not s:
+        return s
+    data = _to_bytes(s)
+    length = len(data)
+    pos = random.randint(0, length - 1)
+    max_del = min(length - pos, 16)
+    del_len = random.randint(1, max_del)
+    return _from_bytes(data[:pos] + data[pos + del_len:])
 
 
 def flip_random_bits(s: str) -> str:
@@ -22,12 +47,12 @@ def flip_random_bits(s: str) -> str:
     if not s:
         return s
 
-    data = bytearray(s.encode('utf-8'))
+    data = _to_bytes(s)
     total_bits = len(data) * 8
 
     N = random.choice([1, 2, 4])
     if total_bits < N:
-        return s  # 不足 N 位，不翻转
+        return s
 
     bit_index = random.randint(0, total_bits - N)
 
@@ -35,11 +60,9 @@ def flip_random_bits(s: str) -> str:
         current_bit = bit_index + i
         byte_index = current_bit // 8
         bit_offset = current_bit % 8
+        data[byte_index] ^= (1 << (7 - bit_offset))
 
-        # 翻转对应位（用异或操作）
-        data[byte_index] ^= (1 << (7 - bit_offset))  # 高位在前（big-endian）
-
-    return data.decode('utf-8', errors='ignore')
+    return _from_bytes(data)
 
 def arithmetic_random_bytes(s: str) -> str:
     """
@@ -54,11 +77,11 @@ def arithmetic_random_bytes(s: str) -> str:
     if not s:
         return s
 
-    data = bytearray(s.encode('utf-8'))
+    data = _to_bytes(s)
     N = random.choice([1, 2, 4])
 
     if len(data) < N:
-        return s  # 数据长度不足 N 字节
+        return s
 
     pos = random.randint(0, len(data) - N)
 
@@ -68,7 +91,7 @@ def arithmetic_random_bytes(s: str) -> str:
         modified = (original + delta) % 256
         data[pos + i] = modified
 
-    return data.decode('utf-8', errors='ignore')
+    return _from_bytes(data)
 
 
 def interesting_random_bytes(s: str) -> str:
@@ -82,37 +105,33 @@ def interesting_random_bytes(s: str) -> str:
     if not s:
         return s
 
-    # 定义各类型的 interesting values
     interesting_values = {
-        1: [ord(c) for c in ['A', 'B', 'C', 'Z', '0', '9', '!', '?']],  # 单字节显示字符
-        2: [int.from_bytes(b, 'big') for b in [b'OK', b'Hi', b'42', b'Go']],  # 2 字节 ASCII
-        4: [int.from_bytes(b, 'big') for b in [b'TEST', b'DEAD', b'BEEF', b'GOOD']],  # 4 字节 ASCII
+        1: [ord(c) for c in ['A', 'B', 'C', 'Z', '0', '9', '!', '?']],
+        2: [int.from_bytes(b, 'big') for b in [b'OK', b'Hi', b'42', b'Go']],
+        4: [int.from_bytes(b, 'big') for b in [b'TEST', b'DEAD', b'BEEF', b'GOOD']],
     }
 
+    # 添加边界值：0, 127, 255 等
+    interesting_values[1].extend([0, 127, 255, 0x7F, 0xFF])
 
-    # 转换为可变字节数组
-    data = bytearray(s.encode('utf-8', errors='ignore'))
+    data = _to_bytes(s)
     N = random.choice([1, 2, 4])
 
     if len(data) < N:
-        return s  # 字节数不足，无法替换
-    
-    # 随机选择替换位置，确保不越界
+        return s
+
     pos = random.randint(0, len(data) - N)
-    
-    # 随机选择一个 interesting value，并转换为字节序列
+
     value = random.choice(interesting_values[N])
-    value_bytes = value.to_bytes(N, byteorder='big')  # 使用 big endian
-    
-    # 替换相应的 N 字节
+    value_bytes = value.to_bytes(N, byteorder='big')
+
     for i in range(N):
         data[pos + i] = value_bytes[i]
 
-    # 返回变异后的字符串（忽略解码错误）
-    return data.decode('utf-8', errors='ignore')
+    return _from_bytes(data)
 
 
-def havoc_random_insert(s: str):
+def havoc_random_insert(s: str) -> str:
     """
     基于 AFL 变异算法策略中的 random havoc 实现随机插入
     随机选取一个位置，插入一段的内容，其中 75% 的概率是插入原文中的任意一段随机长度的内容，25% 的概率是插入一段随机长度的 bytes
@@ -120,32 +139,27 @@ def havoc_random_insert(s: str):
     if not s:
         return s
 
-    data = bytearray(s.encode('utf-8'))
+    data = _to_bytes(s)
     length = len(data)
     insert_pos = random.randint(0, length)
 
-    # 生成插入内容长度，随机范围 1 到 length 或最大 16（防止太长）
     max_len = min(16, length) if length > 0 else 16
     insert_len = random.randint(1, max_len if max_len > 0 else 1)
 
     if random.random() < 0.75:
-        # 75% 概率插入原文中的一段
         if length == 0:
             insert_bytes = bytearray()
         else:
-            start_pos = random.randint(0, length - insert_len)
+            start_pos = random.randint(0, max(0, length - insert_len))
             insert_bytes = data[start_pos:start_pos + insert_len]
     else:
-        # 25% 概率插入随机生成的 bytes（范围选可打印ASCII）
         insert_bytes = bytearray(random.randint(0x20, 0x7E) for _ in range(insert_len))
 
-    # 插入 bytes
     new_data = data[:insert_pos] + insert_bytes + data[insert_pos:]
+    return _from_bytes(new_data)
 
-    return new_data.decode('utf-8', errors='ignore')
 
-
-def havoc_random_replace(s: str):
+def havoc_random_replace(s: str) -> str:
     """
     基于 AFL 变异算法策略中的 random havoc 实现随机替换
     随机选取一个位置，替换随后一段随机长度的内容，其中 75% 的概率是替换为原文中的任意一段随机长度的内容，25% 的概率是替换为一段随机长度的 bytes
@@ -153,78 +167,92 @@ def havoc_random_replace(s: str):
     if not s:
         return s
 
-    data = bytearray(s.encode('utf-8'))
+    data = _to_bytes(s)
     length = len(data)
 
-    # 随机选择替换起始位置
     pos = random.randint(0, length - 1)
 
-    # 替换长度随机，最大为剩余长度或16，防止过长
     max_len = min(16, length - pos)
     replace_len = random.randint(1, max_len)
 
     if random.random() < 0.75:
-        # 75% 概率用原文中随机一段替换
-        if length - replace_len == 0:
+        if length - replace_len <= 0:
             replace_bytes = bytearray()
         else:
             start = random.randint(0, length - replace_len)
             replace_bytes = data[start:start + replace_len]
     else:
-        # 25% 概率用随机生成的可打印 ASCII 替换
         replace_bytes = bytearray(random.randint(0x20, 0x7E) for _ in range(replace_len))
 
-    # 替换指定区间
     new_data = data[:pos] + replace_bytes + data[pos + replace_len:]
+    return _from_bytes(new_data)
 
-    return new_data.decode('utf-8', errors='ignore')
+
+def duplicate_random_bytes(s: str) -> str:
+    """
+    随机选取一段字节并将其复制插入到另一个随机位置
+    1. 随机选取一段长度 L (1~8) 的内容
+    2. 随机选取一个插入位置
+    3. 将该段内容复制并插入到该位置
+    """
+    if not s:
+        return s
+    data = _to_bytes(s)
+    length = len(data)
+    L = random.randint(1, min(8, length))
+    src_pos = random.randint(0, length - L)
+    segment = data[src_pos:src_pos + L]
+    insert_pos = random.randint(0, length)
+    new_data = data[:insert_pos] + segment + data[insert_pos:]
+    return _from_bytes(new_data)
 
 def random_block_swap(s: str) -> str:
     """
     随机选取两个相邻的字节块并交换顺序
     1. 随机选定整个字符串长度内，选取一段长度 L1 (1~8) 和紧随其后的另一段长度 L2 (1~8)
     2. 交换这两段字节块的顺序
-    3. 注意不要越界，且保证两段字节块相邻
     """
     if not s:
         return s
-    
-    data = bytearray(s.encode('utf-8', errors='ignore'))
+
+    data = _to_bytes(s)
     length = len(data)
     if length < 2:
-        return s  # 长度不足
-    
+        return s
+
     max_block_size = 8
-    # 随机选择第一个块的长度，至少1字节，最多8或剩余长度的一半
     L1 = random.randint(1, min(max_block_size, length // 2))
-    # 第二个块长度也类似，但保证相邻且不越界
     L2 = random.randint(1, min(max_block_size, length - L1))
-    
-    # 选定第一个块起始位置，使第二块紧跟其后且不越界
+
     start_pos = random.randint(0, length - (L1 + L2))
-    
+
     block1 = data[start_pos:start_pos + L1]
     block2 = data[start_pos + L1:start_pos + L1 + L2]
-    
-    # 交换块
+
     new_data = data[:start_pos] + block2 + block1 + data[start_pos + L1 + L2:]
-    
-    return new_data.decode('utf-8', errors='ignore')
+    return _from_bytes(new_data)
+
 
 class Mutator:
 
     def __init__(self) -> None:
-        """Constructor"""
-        self.mutators = [
+        self.mutators: List = [
             insert_random_character,
+            delete_random_bytes,
             flip_random_bits,
             arithmetic_random_bytes,
             interesting_random_bytes,
             havoc_random_insert,
             havoc_random_replace,
-            random_block_swap
+            duplicate_random_bytes,
+            random_block_swap,
         ]
+        # 为不同变异类型分配权重，删除类操作概率较低避免输入过快缩小
+        self.weights = [10, 5, 10, 10, 10, 15, 15, 10, 10]
 
     def mutate(self, inp: Any) -> Any:
-        mutator = random.choice(self.mutators)
-        return mutator(inp)
+        mutator = random.choices(self.mutators, weights=self.weights)[0]
+        try:
+            return mutator(inp)
+        except Exception:
+            return inp
