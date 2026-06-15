@@ -92,11 +92,14 @@ def check_extra_scheduler() -> Tuple[bool, str]:
 
 def check_seed_persistence() -> Tuple[bool, str]:
     grey_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fuzzer", "grey_box_fuzzer.py")
+    store_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "utils", "seed_store.py")
+    if not os.path.exists(store_path):
+        return False, "缺少 utils/seed_store.py"
     with open(grey_path, encoding="utf-8") as fh:
         text = fh.read()
-    if "dump_object" in text or "load_object" in text:
-        return True, "grey_box_fuzzer 中已接入 seed 持久化"
-    return False, "仅 main.py 保存最终结果，运行中 seed 未落盘（任务四未完成）"
+    if "SeedPersistence" in text and "_trim_memory_population" in text:
+        return True, "GreyBoxFuzzer 已接入 SeedPersistence 与内存裁剪"
+    return False, "seed 持久化尚未接入 fuzzer 主流程"
 
 
 def run_sample_coverage(sample_id: int, run_time: int = 60) -> Tuple[int, int, float, int, int]:

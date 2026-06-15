@@ -12,8 +12,15 @@ class PathGreyBoxFuzzer(GreyBoxFuzzer):
 
     schedule: PathPowerSchedule
 
-    def __init__(self, seeds: List[str], schedule: PathPowerSchedule, is_print: bool):
-        super().__init__(seeds, schedule, False)
+    def __init__(
+        self,
+        seeds: List[str],
+        schedule: PathPowerSchedule,
+        is_print: bool,
+        seed_dir: str = "",
+        memory_limit: int = 200,
+    ):
+        super().__init__(seeds, schedule, False, seed_dir=seed_dir, memory_limit=memory_limit)
 
         self.last_new_path_time = self.start_time
         self.total_paths = 0
