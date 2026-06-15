@@ -8,6 +8,9 @@ MAX_SEEDS = 1000
 
 class PowerSchedule:
 
+    def __init__(self) -> None:
+        self.evicted_seeds: List[Seed] = []
+
     def register_path(self, path_id: str) -> bool:
         """Optional hook called by PathGreyBoxFuzzer each run. Override in subclasses."""
         return False
@@ -31,6 +34,7 @@ class PowerSchedule:
         norm_energy = self.normalized_energy(population)
         if len(population) > MAX_SEEDS:
             min_index = norm_energy.index(min(norm_energy))
+            self.evicted_seeds.append(population[min_index])
             del norm_energy[min_index]
             del population[min_index]
         seed: Seed = random.choices(population, weights=norm_energy)[0]

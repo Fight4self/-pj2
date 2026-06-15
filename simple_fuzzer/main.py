@@ -45,6 +45,8 @@ def parse_args():
                         help="Disable the status table output")
     parser.add_argument("--schedule", default="path", choices=("path", "size", "coverage_size", "rare_line"),
                         help="Scheduling strategy: path (default), size, coverage_size, rare_line")
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume fuzzing from previously persisted state")
     return parser.parse_args()
 
 
@@ -65,8 +67,19 @@ if __name__ == "__main__":
     f_runner = FunctionCoverageRunner(target_function)
     seeds = load_object(corpus_path)
 
-    grey_fuzzer = PathGreyBoxFuzzer(seeds=seeds, schedule=build_schedule(args.schedule), is_print=not args.quiet)
+    grey_fuzzer = PathGreyBoxFuzzer(seeds=seeds, schedule=build_schedule(args.schedule),
+                                     is_print=not args.quiet, output_dir=args.output_dir,
+                                     sample_id=args.sample)
+
     start_time = time.time()
+    if args.resume:
+        if grey_fuzzer.resume_state():
+            print(f"[resume] Restored {len(grey_fuzzer.population)} seeds, "
+                  f"{len(grey_fuzzer.covered_line)} covered lines, "
+                  f"{len(grey_fuzzer.crash_map)} crashes from disk.")
+        else:
+            print("[resume] No persisted state found, starting fresh.")
+
     grey_fuzzer.runs(f_runner, run_time=args.run_time)
 
     res = Result(grey_fuzzer.covered_line, set(grey_fuzzer.crash_map.values()), start_time, time.time())

@@ -1,6 +1,6 @@
 import os
 import time
-from typing import List, Any, Tuple, Set
+from typing import List, Any, Tuple, Set, Dict
 
 import random
 
@@ -10,34 +10,98 @@ from utils.coverage import Location
 from utils.mutator import Mutator
 from runner.function_coverage_runner import FunctionCoverageRunner
 from schedule.power_schedule import PowerSchedule
+from utils.object_utils import dump_object, load_object
 
 from utils.seed import Seed
 
 
 class GreyBoxFuzzer(Fuzzer):
 
-    def __init__(self, seeds: List[str], schedule: PowerSchedule, is_print: bool) -> None:
+    def __init__(self, seeds: List[str], schedule: PowerSchedule, is_print: bool,
+                 output_dir: str = "_result", sample_id: int = 0) -> None:
         """Constructor.
         `seeds` - a list of (input) strings to mutate.
-        `mutator` - the mutator to apply.
         `schedule` - the power schedule to apply.
+        `output_dir` - directory for persisting intermediate state.
+        `sample_id` - sample identifier for naming persisted files.
         """
         super().__init__()
         self.is_print = is_print
         self.last_crash_time = self.start_time
-        self.population = []
-        self.file_map = {}
+        self.population: List[Seed] = []
+        self.file_map: Dict = {}
         self.covered_line: Set[Location] = set()
         self.seed_index = 0
-        self.crash_map = dict()
+        self.crash_map: Dict = dict()
         self.seeds = seeds
         self.mutator = Mutator()
         self.schedule = schedule
+        self.output_dir = output_dir
+        self.sample_id = sample_id
+        self.last_save_time = self.start_time
+        self.save_interval_execs = 500
+        self.save_interval_secs = 30
         if is_print:
             print("""
 ┌───────────────────────┬───────────────────────┬───────────────────┬────────────────┬───────────────────┐
 │        Run Time       │    Last Uniq Crash    │    Total Execs    │  Uniq Crashes  │   Covered Lines   │
 ├───────────────────────┼───────────────────────┼───────────────────┼────────────────┼───────────────────┤""")
+
+    def save_state(self) -> None:
+        """Persist population, crashes and evicted seeds to disk."""
+        os.makedirs(self.output_dir, exist_ok=True)
+        prefix = os.path.join(self.output_dir, f"Sample-{self.sample_id}")
+
+        if self.population:
+            dump_object(f"{prefix}_population.pkl", self.population)
+
+        if self.crash_map:
+            # Deduplicate: keep only one input per unique crash hash
+            deduped: Dict[str, str] = {}
+            for inp, h in self.crash_map.items():
+                if h not in deduped:
+                    deduped[h] = inp
+                elif len(inp) < len(deduped[h]):
+                    deduped[h] = inp  # keep shorter input for easier reproduction
+            dump_object(f"{prefix}_crashes.pkl", deduped)
+
+        if self.schedule.evicted_seeds:
+            evicted_path = f"{prefix}_evicted.pkl"
+            existing = []
+            if os.path.exists(evicted_path):
+                try:
+                    existing = load_object(evicted_path)
+                except Exception:
+                    pass
+            existing.extend(self.schedule.evicted_seeds)
+            dump_object(evicted_path, existing)
+            self.schedule.evicted_seeds.clear()
+
+    def resume_state(self) -> bool:
+        """Try to restore population and crashes from a previous run."""
+        prefix = os.path.join(self.output_dir, f"Sample-{self.sample_id}")
+        pop_path = f"{prefix}_population.pkl"
+        crash_path = f"{prefix}_crashes.pkl"
+
+        if not os.path.exists(pop_path):
+            return False
+
+        try:
+            self.population = load_object(pop_path)
+            if os.path.exists(crash_path):
+                saved_crashes = load_object(crash_path)
+                if saved_crashes:
+                    first_key = next(iter(saved_crashes.keys()))
+                    if len(first_key) == 32 and all(c in '0123456789abcdef' for c in first_key):
+                        # Deduped format (hash -> input): convert back to (input -> hash)
+                        self.crash_map = {inp: h for h, inp in saved_crashes.items()}
+                    else:
+                        self.crash_map = saved_crashes
+            for seed in self.population:
+                self.covered_line |= seed.coverage
+            return True
+        except Exception:
+            return False
 
 
     def create_candidate(self) -> str:
@@ -98,5 +162,10 @@ class GreyBoxFuzzer(Fuzzer):
         if outcome == Runner.FAIL:
             self.last_crash_time = time.time()
             self.crash_map[self.inp] = result
+
+        if self.total_execs % self.save_interval_execs == 0 or \
+           time.time() - self.last_save_time > self.save_interval_secs:
+            self.save_state()
+            self.last_save_time = time.time()
 
         return result, outcome
