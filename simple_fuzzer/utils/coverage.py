@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 from typing import Any, Optional, Callable, List, Type, Set, Tuple
 from types import FrameType, TracebackType
@@ -6,6 +7,28 @@ import sys
 import inspect
 
 Location = Tuple[str, int]
+
+
+def path_id_from_trace(trace: List[Location]) -> str:
+    """Derive a stable path identifier from an execution trace.
+
+    Uses consecutive control-flow edges (prev_line, curr_line), which is the
+    same intuition as edge-based coverage in AFL-style fuzzers: two inputs that
+    traverse the same edges share one path bucket even if their full traces
+    differ in length due to early termination.
+    """
+    if not trace:
+        return hashlib.md5(b"<empty>").hexdigest()
+
+    edges = tuple(zip(trace, trace[1:]))
+    return hashlib.md5(repr(edges).encode()).hexdigest()
+
+
+def path_id_from_coverage(coverage: Set[Location]) -> str:
+    """Fallback path identifier when only coverage set is available."""
+    if not coverage:
+        return hashlib.md5(b"<empty>").hexdigest()
+    return hashlib.md5(repr(tuple(sorted(coverage))).encode()).hexdigest()
 
 
 def import_all_functions_from_module(module_name):

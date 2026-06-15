@@ -1,17 +1,18 @@
-from typing import Set, Union
+from typing import Set
 
-from utils.coverage import Location
+from utils.coverage import Location, path_id_from_coverage
 
 
 class Seed:
     """Represent an input with additional attributes"""
 
-    def __init__(self, data: str, _coverage: Set[Location]) -> None:
+    def __init__(self, data: str, _coverage: Set[Location], path_id: str = "") -> None:
         """Initialize from seed data"""
         self.data = data
 
         # These will be needed for advanced power schedules
         self.coverage: Set[Location] = _coverage
+        self.path_id = path_id or path_id_from_coverage(_coverage)
         self.energy = 0.0
 
     def __str__(self) -> str:

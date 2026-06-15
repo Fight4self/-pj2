@@ -10,6 +10,7 @@ class FunctionCoverageRunner(Runner):
     def __init__(self, function: Callable) -> None:
         """Initialize.  `function` is a function to be executed"""
         self._coverage = None
+        self._trace: List[Location] = []
         self.function = function
         self.cumulative_coverage: List[int] = []
         self.all_coverage: Set[Location] = set()
@@ -21,6 +22,7 @@ class FunctionCoverageRunner(Runner):
             except Exception as exc:
                 raise exc
             finally:
+                self._trace = cov.trace()
                 self._coverage = cov.coverage()
                 self.all_coverage |= cov.coverage()
                 self.cumulative_coverage.append(len(self.all_coverage))
@@ -29,6 +31,10 @@ class FunctionCoverageRunner(Runner):
 
     def coverage(self) -> Set[Location]:
         return self._coverage
+
+    def trace(self) -> List[Location]:
+        """Ordered execution trace from the most recent run."""
+        return self._trace
     
     def run(self, inp: str) -> Tuple[Any, str]:
         try:
