@@ -80,7 +80,11 @@ if __name__ == "__main__":
         else:
             print("[resume] No persisted state found, starting fresh.")
 
-    grey_fuzzer.runs(f_runner, run_time=args.run_time)
+    try:
+        grey_fuzzer.runs(f_runner, run_time=args.run_time)
+    except KeyboardInterrupt:
+        print("\nInterrupted. Saving current state...")
+        grey_fuzzer.save_state()
 
     res = Result(grey_fuzzer.covered_line, set(grey_fuzzer.crash_map.values()), start_time, time.time())
     output_path = os.path.join(args.output_dir, f"Sample-{args.sample}.pkl")
